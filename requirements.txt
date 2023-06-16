@@ -1,0 +1,7 @@
+ipython==8.5.0
+psutil==5.9.2
+scipy==1.9.1
+tensorflow==2.10.0
+tensorflow-io==0.27.0
+pandas==1.5.1
+tensorflow_model_optimization==0.7.4
