@@ -1,7 +1,10 @@
 ipython==8.5.0
 psutil==5.9.2
 scipy==1.9.1
-tensorflow==2.10.0
+tensorflow==2.12.0
 tensorflow-io==0.27.0
 pandas==1.5.1
 tensorflow_model_optimization==0.7.4
+mediapipe==0.10.0
+opencv-python==4.7.0.72
+protobuf==3.20.3
