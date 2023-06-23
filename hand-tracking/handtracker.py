@@ -8,7 +8,7 @@ from itertools import islice
 
 
 class HandTracker():
-    def __init__(self, mode=False, max_hands=2, detection_con=0.5,model_complexity=1,track_con=0.5) -> None:
+    def __init__(self, buffer_length=5, mode=False, max_hands=2, detection_con=0.5,model_complexity=1,track_con=0.5) -> None:
         self.mode = mode
         self.max_hands = max_hands
         self.detection_con = detection_con
@@ -18,12 +18,12 @@ class HandTracker():
         self.hands = self.mp_hands.Hands(self.mode, self.max_hands,self.model_complexity,
                                         self.detection_con, self.track_con)
         self.results=None
-        self.left_image_buffer = deque(5*[[]], 5)
-        self.right_image_buffer = deque(5*[[]], 5)
-        self.left_min_box_size_buffer = deque(5*[-1], 5)
-        self.right_min_box_size_buffer = deque(5*[-1], 5)
-        self.left_max_box_size_buffer = deque(5*[-1], 5)
-        self.right_max_box_size_buffer = deque(5*[-1], 5)
+        self.left_image_buffer = deque(buffer_length*[[]], buffer_length)
+        self.right_image_buffer = deque(buffer_length*[[]], buffer_length)
+        self.left_min_box_size_buffer = deque(buffer_length*[-1], buffer_length)
+        self.right_min_box_size_buffer = deque(buffer_length*[-1], buffer_length)
+        self.left_max_box_size_buffer = deque(buffer_length*[-1], buffer_length)
+        self.right_max_box_size_buffer = deque(buffer_length*[-1], buffer_length)
 
     def hands_finder(self,imageRGB):
         self.results = self.hands.process(imageRGB)
@@ -137,7 +137,7 @@ def main():
         success,image = cap.read()
         imageRGB = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
         tracker.hands_finder(imageRGB)
-        tracker.square_box(image, draw=True)
+        tracker.square_box(image, draw=False)
 
         if i == 5:
             hei_left = tracker.image_averaging('Left')
