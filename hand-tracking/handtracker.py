@@ -34,8 +34,6 @@ class HandTracker():
         self.left_max_box_size_buffer = deque(buffer_length*[-1], buffer_length)
         self.right_max_box_size_buffer = deque(buffer_length*[-1], buffer_length)
 
-        self.left_fg_mask = deque(buffer_length*[[]], buffer_length)
-        self.right_fg_mask = deque(buffer_length*[[]], buffer_length)
 
     def hands_finder(self,imageRGB):
         self.results = self.hands.process(imageRGB)
@@ -75,17 +73,16 @@ class HandTracker():
 
                 if start_point >= (0,0) and end_point <= (w,h):
                     distance_to_border = min(mf_mcp_cx, w-mf_mcp_cx, mf_mcp_cy, h-mf_mcp_cy) # min value from mf_mcp to the border 
-                    fg_mask = self.return_fg_mask(image)
                     hand_label = hands_type[i]
                     min_box_size = 2*distance # minimum square box side length
                     max_box_size = 2*distance_to_border # maximum square box side length
-                    self.add_to_buffer(image, mf_mcp_cx, mf_mcp_cy, min_box_size, max_box_size, fg_mask, hand_label)
+                    self.add_to_buffer(image, mf_mcp_cx, mf_mcp_cy, min_box_size, max_box_size, hand_label)
 
                     if len(hands_type) == 1:
                         if hand_label == 'Left':
-                            self.add_to_buffer([], -1, -1, -1, -1, [], 'Right')
+                            self.add_to_buffer([], -1, -1, -1, -1, 'Right')
                         elif hand_label == 'Right':
-                            self.add_to_buffer([], -1, -1, -1, -1, [], 'Left')
+                            self.add_to_buffer([], -1, -1, -1, -1, 'Left')
 
                     if draw:
                         cv2.rectangle(image, start_point, end_point, (0,255,0), 2)
@@ -93,19 +90,17 @@ class HandTracker():
                 i += 1
         return
     
-    def add_to_buffer(self, image, cx, cy, min_box_size, max_box_size, fg_mask, hand):
+    def add_to_buffer(self, image, cx, cy, min_box_size, max_box_size, hand):
         if hand == 'Left':
             self.left_image_buffer.appendleft(image)
             self.left_center_coordinates.appendleft([cx,cy])
             self.left_min_box_size_buffer.appendleft(min_box_size)
             self.left_max_box_size_buffer.appendleft(max_box_size)
-            self.left_fg_mask.appendleft(fg_mask)
         elif hand == 'Right':
             self.right_image_buffer.appendleft(image)
             self.right_center_coordinates.appendleft([cx,cy])
             self.right_min_box_size_buffer.appendleft(min_box_size)
             self.right_max_box_size_buffer.appendleft(max_box_size)
-            self.right_fg_mask.appendleft(fg_mask)
 
     def crop_square(self, image, cx, cy, square_size):
         start_point, end_point = self._start_end_point(cx, cy, int(square_size/2))
@@ -124,19 +119,16 @@ class HandTracker():
             coordinates = self.left_center_coordinates
             min_common_box_size = max(self.left_min_box_size_buffer)
             max_common_box_size = min(self.left_max_box_size_buffer)
-            fg_masks = self.left_fg_mask
         elif hand == 'Right':
             images = self.right_image_buffer
             coordinates = self.right_center_coordinates
             min_common_box_size = max(self.right_min_box_size_buffer)
             max_common_box_size = min(self.right_max_box_size_buffer)
-            fg_masks = self.right_fg_mask
 
         if len(images[0]) > 0 and min_common_box_size <= max_common_box_size:
             avg_image = images[0]
             cx, cy = coordinates[0]
             avg_image = self.crop_square(avg_image, cx, cy, min_common_box_size)
-            fg_mask = self.crop_square(fg_masks[0], cx, cy, min_common_box_size)
             
             i = 1
             for image in list(islice(images,1,len(images))):
@@ -146,10 +138,7 @@ class HandTracker():
                     alpha = 1.0/(i + 1)
                     beta = 1.0 - alpha
                     avg_image = cv2.addWeighted(image, alpha, avg_image, beta, 0.0)
-                    cropped_fg_mask = self.crop_square(fg_masks[i], cx, cy, min_common_box_size)
-                    fg_mask = cv2.bitwise_or(fg_mask, cropped_fg_mask)
                     i += 1
-            avg_image = self.add_white_background(avg_image, fg_mask)
 
             if save:
                 self.save_image(avg_image, hand)
@@ -157,19 +146,31 @@ class HandTracker():
         else:
             return []
         
-    def return_fg_mask(self, image):
-        blurred_image = cv2.GaussianBlur(image,(5,5), 0)
-        fg_mask = self.back_sub.apply(blurred_image)
-        return fg_mask
+    # def return_fg_mask(self, image):
+    #     blurred_image = cv2.GaussianBlur(image,(5,5), 0)
+    #     fg_mask = self.back_sub.apply(blurred_image)
+    #     return fg_mask
     
-    def add_white_background(self, image, fg_mask):
-        foreground = cv2.bitwise_and(image,image, mask=fg_mask)
-        blank_image = np.full(image.shape, 255, np.uint8)
-        final_image = blank_image + foreground 
-        return final_image
+    # def add_white_background(self, image, fg_mask):
+    #     foreground = cv2.bitwise_and(image,image, mask=fg_mask)
+    #     blank_image = np.full(image.shape, 255, np.uint8)
+    #     final_image = blank_image + foreground 
+    #     return final_image
         
     def save_image(self, image, file_name, extension='jpg', folder_path=os.getcwd()):
         cv2.imwrite(os.path.join(folder_path, file_name + '.' + extension), image)
+        return
+    
+    def tracking(self, image, subpixel_layout='BGR'):
+        if subpixel_layout == 'BGR':
+            imageBGR = image
+            imageRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        elif subpixel_layout == 'RGB':
+            imageRGB = image
+            imageBGR = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+        self.hands_finder(imageRGB)
+        self.square_box(imageBGR, draw=False)
         return
     
 def main():
@@ -200,5 +201,5 @@ def main():
         cv2.waitKey(50)
         
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
