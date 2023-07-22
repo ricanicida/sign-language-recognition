@@ -8,7 +8,9 @@ from itertools import islice
 
 
 class HandTracker():
-    def __init__(self, buffer_length=10, mode=False, max_hands=2, detection_con=0.5,model_complexity=1,track_con=0.5) -> None:
+    def __init__(self, video_fps: int=0, hei_sampling_rate: int=0, hei_max_duration: int=0,
+                 hei_overlap: float=0, hei_max_frames: int=30, mode: bool=False, max_hands: int=2,
+                 detection_con: float=0.5, model_complexity: int=1, track_con: float=0.5) -> None:
         self.mode = mode
         self.max_hands = max_hands
         self.detection_con = detection_con
@@ -19,8 +21,21 @@ class HandTracker():
                                         self.detection_con, self.track_con)
         self.results=None
 
-        self.back_sub = cv2.createBackgroundSubtractorKNN()
-        # self.back_sub = cv2.createBackgroundSubtractorMOG2()
+        if hei_max_duration and hei_sampling_rate:
+            buffer_length = int(hei_sampling_rate * hei_max_duration)
+        else:
+            buffer_length = hei_max_frames
+
+        if video_fps and hei_sampling_rate:
+            hei_frame_step = int(video_fps/hei_sampling_rate)
+        else:
+            hei_frame_step = 1
+
+        self.hei_frame_step = hei_frame_step
+        self.buffer_length = buffer_length
+        self.hei_overlap = int(hei_overlap*buffer_length)
+        self.frame_count = 0
+        self.hei_flag = True
 
         self.left_image_buffer = deque(buffer_length*[[]], buffer_length)
         self.right_image_buffer = deque(buffer_length*[[]], buffer_length)
@@ -36,21 +51,23 @@ class HandTracker():
 
 
     def hands_finder(self,imageRGB):
-        self.results = self.hands.process(imageRGB)
+        if self.frame_count % self.hei_frame_step == 0:
+            self.hei_flag = True
+            self.results = self.hands.process(imageRGB)
+        else:
+            self.hei_flag = False
+        self.frame_count += 1
         return
     
-    def _update_max_box_size(self):
-        self.left_max_box_side = max([len(x) for x in self.left_image_buffer])
-        self.right_max_box_side = max([len(x) for x in self.right_image_buffer])
-        return
     
     def _start_end_point(self, cx, cy, distance):
         start_point = (cx-distance, cy-distance)
         end_point = (cx+distance, cy+distance)
         return start_point, end_point
+    
 
-    def square_box(self, image, draw=True):
-        if self.results.multi_hand_landmarks:
+    def square_box(self, image):
+        if self.hei_flag and self.results.multi_hand_landmarks:
             hands_type = []
             h,w,c = image.shape
 
@@ -83,12 +100,10 @@ class HandTracker():
                             self.add_to_buffer([], -1, -1, -1, -1, 'Right')
                         elif hand_label == 'Right':
                             self.add_to_buffer([], -1, -1, -1, -1, 'Left')
-
-                    if draw:
-                        cv2.rectangle(image, start_point, end_point, (0,255,0), 2)
                         
                 i += 1
         return
+    
     
     def add_to_buffer(self, image, cx, cy, min_box_size, max_box_size, hand):
         if hand == 'Left':
@@ -102,43 +117,45 @@ class HandTracker():
             self.right_min_box_size_buffer.appendleft(min_box_size)
             self.right_max_box_size_buffer.appendleft(max_box_size)
 
+
     def crop_square(self, image, cx, cy, square_size):
         start_point, end_point = self._start_end_point(cx, cy, int(square_size/2))
         cropped_image = image[start_point[1]:end_point[1], start_point[0]:end_point[0]]
         return cropped_image
     
-    def recrop_hand(self, image, box_size):
-        original_size = len(image)
-        border_width = int((original_size - box_size)/2)
-        cropped_image = image[border_width:original_size-border_width, border_width:original_size-border_width]
-        return cropped_image
 
     def image_averaging(self, hand, save=False):
         if hand == 'Left':
             images = self.left_image_buffer
             coordinates = self.left_center_coordinates
             min_common_box_size = max(self.left_min_box_size_buffer)
-            max_common_box_size = min(self.left_max_box_size_buffer)
+            max_common_box_size = min([x for x in self.left_max_box_size_buffer if x>0])
         elif hand == 'Right':
             images = self.right_image_buffer
             coordinates = self.right_center_coordinates
             min_common_box_size = max(self.right_min_box_size_buffer)
-            max_common_box_size = min(self.right_max_box_size_buffer)
+            max_common_box_size = min([x for x in self.right_max_box_size_buffer if x>0])
+        
 
-        if len(images[0]) > 0 and min_common_box_size <= max_common_box_size:
-            avg_image = images[0]
-            cx, cy = coordinates[0]
-            avg_image = self.crop_square(avg_image, cx, cy, min_common_box_size)
-            
-            i = 1
-            for image in list(islice(images,1,len(images))):
-                if len(image) > 0:
-                    cx, cy = coordinates[i]
-                    image = self.crop_square(images[i], cx, cy, min_common_box_size)
-                    alpha = 1.0/(i + 1)
-                    beta = 1.0 - alpha
-                    avg_image = cv2.addWeighted(image, alpha, avg_image, beta, 0.0)
-                    i += 1
+        if min_common_box_size <= max_common_box_size:
+            avg_image = []            
+            k = 0
+            # for image in list(islice(images,0,len(images))):
+            for i in range(self.buffer_length):
+                if len(images[i]) > 0 and -1 not in coordinates[i]:
+                    if len(avg_image) == 0:
+                        cx, cy = coordinates[i]
+                        cropped_image = self.crop_square(images[i], cx, cy, min_common_box_size)
+                        avg_image = cropped_image
+                        k += 1
+                    else:
+                        cx, cy = coordinates[i]
+                        cropped_image = self.crop_square(images[i], cx, cy, min_common_box_size)
+                        alpha = 1.0/(k + 1)
+                        beta = 1.0 - alpha
+                        avg_image = cv2.addWeighted(cropped_image, alpha, avg_image, beta, 0.0)
+                        k += 1
+                    
 
             if save:
                 self.save_image(avg_image, hand)
@@ -146,20 +163,12 @@ class HandTracker():
         else:
             return []
         
-    # def return_fg_mask(self, image):
-    #     blurred_image = cv2.GaussianBlur(image,(5,5), 0)
-    #     fg_mask = self.back_sub.apply(blurred_image)
-    #     return fg_mask
-    
-    # def add_white_background(self, image, fg_mask):
-    #     foreground = cv2.bitwise_and(image,image, mask=fg_mask)
-    #     blank_image = np.full(image.shape, 255, np.uint8)
-    #     final_image = blank_image + foreground 
-    #     return final_image
+        
         
     def save_image(self, image, file_name, extension='jpg', folder_path=os.getcwd()):
         cv2.imwrite(os.path.join(folder_path, file_name + '.' + extension), image)
         return
+    
     
     def tracking(self, image, subpixel_layout='BGR'):
         if subpixel_layout == 'BGR':
@@ -170,8 +179,9 @@ class HandTracker():
             imageBGR = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
         self.hands_finder(imageRGB)
-        self.square_box(imageBGR, draw=False)
+        self.square_box(imageBGR)
         return
+    
     
 def main():
     cap = cv2.VideoCapture(0)
@@ -182,7 +192,7 @@ def main():
         success,image = cap.read()
         imageRGB = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
         tracker.hands_finder(imageRGB)
-        tracker.square_box(image, draw=False)
+        tracker.square_box(image)
 
         if i == 50:
             hei_left = tracker.image_averaging('Left', save=False)
