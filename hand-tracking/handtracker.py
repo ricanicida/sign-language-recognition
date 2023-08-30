@@ -124,17 +124,25 @@ class HandTracker():
         return cropped_image
     
 
-    def image_averaging(self, hand, save=False):
+    def image_averaging(self, hand, save=False, folder_path=os.getcwd(), file_name='', extension='jpg'):
         if hand == 'Left':
             images = self.left_image_buffer
             coordinates = self.left_center_coordinates
             min_common_box_size = max(self.left_min_box_size_buffer)
-            max_common_box_size = min([x for x in self.left_max_box_size_buffer if x>0])
+            max_common_box_size_list = [x for x in self.left_max_box_size_buffer if x>0]
+            if len(max_common_box_size_list) > 0:
+                max_common_box_size = min(max_common_box_size_list)
+            else:
+                max_common_box_size = -1 
         elif hand == 'Right':
             images = self.right_image_buffer
             coordinates = self.right_center_coordinates
             min_common_box_size = max(self.right_min_box_size_buffer)
-            max_common_box_size = min([x for x in self.right_max_box_size_buffer if x>0])
+            max_common_box_size_list = [x for x in self.right_max_box_size_buffer if x>0]
+            if len(max_common_box_size_list) > 0:
+                max_common_box_size = min(max_common_box_size_list)
+            else:
+                max_common_box_size = -1
         
 
         if min_common_box_size <= max_common_box_size:
@@ -158,7 +166,7 @@ class HandTracker():
                     
 
             if save:
-                self.save_image(avg_image, hand)
+                self.save_image(avg_image, folder_path=folder_path, file_name=file_name, extension=extension)
             return avg_image
         else:
             return []
@@ -166,7 +174,8 @@ class HandTracker():
         
         
     def save_image(self, image, file_name, extension='jpg', folder_path=os.getcwd()):
-        cv2.imwrite(os.path.join(folder_path, file_name + '.' + extension), image)
+        if len(image)>0:
+            cv2.imwrite(os.path.join(folder_path, file_name + '.' + extension), image)
         return
     
     
