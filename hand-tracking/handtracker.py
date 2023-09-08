@@ -5,11 +5,12 @@ import numpy as np
 import os
 from collections import deque
 from itertools import islice
+from time import time_ns
 
 
 class HandTracker():
-    def __init__(self, video_fps: int=0, hei_sampling_rate: int=0, hei_max_duration: int=0,
-                 hei_overlap: float=0, hei_max_frames: int=30, mode: bool=False, max_hands: int=2,
+    def __init__(self, video_fps: int=0, hei_sampling_rate: int=0, hei_max_duration: float=0,
+                 hei_overlap: float=0, hei_max_frames: int=30, mode: str='IMAGE', max_hands: int=2,
                  detection_con: float=0.5, model_complexity: int=1, track_con: float=0.5) -> None:
         self.mode = mode
         self.max_hands = max_hands
@@ -33,9 +34,13 @@ class HandTracker():
 
         self.hei_frame_step = hei_frame_step
         self.buffer_length = buffer_length
-        self.hei_overlap = int(hei_overlap*buffer_length)
-        self.frame_count = 0
-        self.hei_flag = True
+        self.hei_overlap_frame = int((1-hei_overlap)*buffer_length)
+        self.hei_frame_count = 0
+        self.hei_frame_flag = True
+        self.hei_averaging_flag = False
+        self.first_hei_flag = True
+        
+        self.video_frame_count = 0
 
         self.left_image_buffer = deque(buffer_length*[[]], buffer_length)
         self.right_image_buffer = deque(buffer_length*[[]], buffer_length)
@@ -51,12 +56,13 @@ class HandTracker():
 
 
     def hands_finder(self,imageRGB):
-        if self.frame_count % self.hei_frame_step == 0:
-            self.hei_flag = True
+        if self.video_frame_count % self.hei_frame_step == 0:
+            self.hei_frame_flag = True
             self.results = self.hands.process(imageRGB)
+            self.hei_frame_count += 1
         else:
-            self.hei_flag = False
-        self.frame_count += 1
+            self.hei_frame_flag = False
+        self.video_frame_count += 1
         return
     
     
@@ -67,7 +73,7 @@ class HandTracker():
     
 
     def square_box(self, image):
-        if self.hei_flag and self.results.multi_hand_landmarks:
+        if self.hei_frame_flag and self.results.multi_hand_landmarks:
             hands_type = []
             h,w,c = image.shape
 
@@ -124,8 +130,24 @@ class HandTracker():
         return cropped_image
     
 
-    def image_averaging(self, hand, save=False, folder_path=os.getcwd(), file_name='', extension='jpg'):
-        if hand == 'Left':
+    def image_averaging(self, label='', last_hei_flag=False, save=False, folder_path=os.getcwd(), file_name='', extension='jpg'):
+        if self.first_hei_flag:
+            first_hei = self.hei_frame_count + 1 == self.buffer_length
+            subsequent_hei = False
+        else:
+            subsequent_hei = self.hei_frame_count == self.hei_overlap_frame
+            first_hei = False
+
+        if last_hei_flag:
+            last_hei = self.first_hei_flag or (self.hei_frame_count >= int(0.5 * self.hei_overlap_frame))
+        else:
+            last_hei = False
+
+        if first_hei or subsequent_hei or last_hei:
+            self.first_hei_flag = False
+            self.hei_frame_count = 0
+
+            hand = 'Left'
             images = self.left_image_buffer
             coordinates = self.left_center_coordinates
             min_common_box_size = max(self.left_min_box_size_buffer)
@@ -134,7 +156,38 @@ class HandTracker():
                 max_common_box_size = min(max_common_box_size_list)
             else:
                 max_common_box_size = -1 
-        elif hand == 'Right':
+
+            if min_common_box_size <= max_common_box_size:
+                avg_image = []            
+                k = 0
+                # for image in list(islice(images,0,len(images))):
+                for i in range(self.buffer_length):
+                    if len(images[i]) > 0 and -1 not in coordinates[i]:
+                        if len(avg_image) == 0:
+                            cx, cy = coordinates[i]
+                            cropped_image = self.crop_square(images[i], cx, cy, min_common_box_size)
+                            avg_image = cropped_image
+                            k += 1
+                        else:
+                            cx, cy = coordinates[i]
+                            cropped_image = self.crop_square(images[i], cx, cy, min_common_box_size)
+                            alpha = 1.0/(k + 1)
+                            beta = 1.0 - alpha
+                            avg_image = cv2.addWeighted(cropped_image, alpha, avg_image, beta, 0.0)
+                            k += 1   
+
+                if save:
+                    time_str = str(time_ns())
+                    file_name = time_str + '_' + file_name + '_' + hand
+                    folder_path_left = os.path.join(folder_path, hand, label)
+                    self.save_image(avg_image, folder_path=folder_path_left, file_name=file_name, extension=extension)
+                left_hei = avg_image
+            else:
+                left_hei = []
+
+
+                
+            hand = 'Right'
             images = self.right_image_buffer
             coordinates = self.right_center_coordinates
             min_common_box_size = max(self.right_min_box_size_buffer)
@@ -143,33 +196,39 @@ class HandTracker():
                 max_common_box_size = min(max_common_box_size_list)
             else:
                 max_common_box_size = -1
-        
+            
 
-        if min_common_box_size <= max_common_box_size:
-            avg_image = []            
-            k = 0
-            # for image in list(islice(images,0,len(images))):
-            for i in range(self.buffer_length):
-                if len(images[i]) > 0 and -1 not in coordinates[i]:
-                    if len(avg_image) == 0:
-                        cx, cy = coordinates[i]
-                        cropped_image = self.crop_square(images[i], cx, cy, min_common_box_size)
-                        avg_image = cropped_image
-                        k += 1
-                    else:
-                        cx, cy = coordinates[i]
-                        cropped_image = self.crop_square(images[i], cx, cy, min_common_box_size)
-                        alpha = 1.0/(k + 1)
-                        beta = 1.0 - alpha
-                        avg_image = cv2.addWeighted(cropped_image, alpha, avg_image, beta, 0.0)
-                        k += 1
-                    
+            if min_common_box_size <= max_common_box_size:
+                avg_image = []            
+                k = 0
+                # for image in list(islice(images,0,len(images))):
+                for i in range(self.buffer_length):
+                    if len(images[i]) > 0 and -1 not in coordinates[i]:
+                        if len(avg_image) == 0:
+                            cx, cy = coordinates[i]
+                            cropped_image = self.crop_square(images[i], cx, cy, min_common_box_size)
+                            avg_image = cropped_image
+                            k += 1
+                        else:
+                            cx, cy = coordinates[i]
+                            cropped_image = self.crop_square(images[i], cx, cy, min_common_box_size)
+                            alpha = 1.0/(k + 1)
+                            beta = 1.0 - alpha
+                            avg_image = cv2.addWeighted(cropped_image, alpha, avg_image, beta, 0.0)
+                            k += 1   
 
-            if save:
-                self.save_image(avg_image, folder_path=folder_path, file_name=file_name, extension=extension)
-            return avg_image
+                if save:
+                    time_str = str(time_ns())
+                    file_name = time_str + '_' + file_name + '_' + hand
+                    folder_path_right = os.path.join(folder_path, hand, label)
+                    self.save_image(avg_image, folder_path=folder_path_right, file_name=file_name, extension=extension)
+                right_hei = avg_image
+            else:
+                right_hei = []
+
+            return left_hei, right_hei
         else:
-            return []
+            return [[],[]]
         
         
         
