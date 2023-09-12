@@ -9,7 +9,7 @@ from time import time_ns
 
 
 class HandTracker():
-    def __init__(self, video_fps: int=0, hei_sampling_rate: int=0, hei_max_duration: float=0,
+    def __init__(self, video_fps: int=0, hei_sampling_rate: int=0, hei_frame_step: int=1, hei_max_duration: float=0,
                  hei_overlap: float=0, hei_max_frames: int=30, mode: str='IMAGE', max_hands: int=2,
                  detection_con: float=0.5, model_complexity: int=1, track_con: float=0.5) -> None:
         self.mode = mode
@@ -29,8 +29,6 @@ class HandTracker():
 
         if video_fps and hei_sampling_rate:
             hei_frame_step = int(video_fps/hei_sampling_rate)
-        else:
-            hei_frame_step = 1
 
         self.hei_frame_step = hei_frame_step
         self.buffer_length = buffer_length
