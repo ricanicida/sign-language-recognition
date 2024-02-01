@@ -171,12 +171,15 @@ class HandTracker():
                             cropped_image = self.crop_square(images[i], cx, cy, min_common_box_size)
                             alpha = 1.0/(k + 1)
                             beta = 1.0 - alpha
-                            avg_image = cv2.addWeighted(cropped_image, alpha, avg_image, beta, 0.0)
+                            try:
+                                avg_image = cv2.addWeighted(cropped_image, alpha, avg_image, beta, 0.0)
+                            except:
+                                print(f'cropped_image', cropped_image.shape)
+                                print(f'avg_image', avg_image.shape)
                             k += 1   
 
                 if save:
-                    time_str = str(time_ns())
-                    file_name = time_str + '_' + file_name + '_' + hand
+                    file_name = file_name + '_' + hand
                     folder_path_left = os.path.join(folder_path, hand, label)
                     self.save_image(avg_image, folder_path=folder_path_left, file_name=file_name, extension=extension)
                 left_hei = avg_image
@@ -212,12 +215,15 @@ class HandTracker():
                             cropped_image = self.crop_square(images[i], cx, cy, min_common_box_size)
                             alpha = 1.0/(k + 1)
                             beta = 1.0 - alpha
-                            avg_image = cv2.addWeighted(cropped_image, alpha, avg_image, beta, 0.0)
+                            try:
+                                avg_image = cv2.addWeighted(cropped_image, alpha, avg_image, beta, 0.0)
+                            except:
+                                print(f'cropped_image', cropped_image.shape)
+                                print(f'avg_image', avg_image.shape)
                             k += 1   
 
                 if save:
-                    time_str = str(time_ns())
-                    file_name = time_str + '_' + file_name + '_' + hand
+                    file_name = file_name + '_' + hand
                     folder_path_right = os.path.join(folder_path, hand, label)
                     self.save_image(avg_image, folder_path=folder_path_right, file_name=file_name, extension=extension)
                 right_hei = avg_image
@@ -231,11 +237,11 @@ class HandTracker():
         
         
     def save_image(self, image, file_name, extension='jpg', folder_path=os.getcwd()):
-        if len(image)>0:
+        if len(image)>0 and not os.path.exists(os.path.join(folder_path, file_name + '.' + extension)):
             cv2.imwrite(os.path.join(folder_path, file_name + '.' + extension), image)
         return
     
-    
+
     def tracking(self, image, subpixel_layout='BGR'):
         if subpixel_layout == 'BGR':
             imageBGR = image
@@ -248,34 +254,3 @@ class HandTracker():
         self.square_box(imageBGR)
         return
     
-    
-def main():
-    cap = cv2.VideoCapture(0)
-    tracker = HandTracker()
-
-    i = 0
-    while True:
-        success,image = cap.read()
-        imageRGB = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
-        tracker.hands_finder(imageRGB)
-        tracker.square_box(image)
-
-        if i == 50:
-            hei_left = tracker.image_averaging('Left', save=False)
-            hei_right = tracker.image_averaging('Right', save=False)
-            if len(hei_left) > 0:
-                cv2.imshow("HEI left", hei_left)
-                cv2.waitKey(0)
-            if len(hei_right) > 0:
-                cv2.imshow("HEI right", hei_right)
-                cv2.waitKey(0)
-            break
-
-        i += 1
-
-        cv2.imshow("Video", image)
-        cv2.waitKey(50)
-        
-
-# if __name__ == "__main__":
-#     main()
