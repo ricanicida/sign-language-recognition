@@ -92,6 +92,7 @@ class HandTracker3():
             self.input_video_frame_count = 0
 
             imgs_path = Path(f'./temp/video_{self.output_video_count}/')
+            imgs_path.mkdir(parents=True, exist_ok=True)
             video_array = []
             for file_name in imgs_path.glob('*.jpg'):
                 img = cv2.imread(str(file_name))
@@ -99,8 +100,7 @@ class HandTracker3():
             height = len(img)
             width = len(img[0])
 
-            dest = str(folder_path/label/f'video_{self.output_video_count}_{video_name}.avi')
-            print(dest)
+            dest = str(folder_path/label/f'video_{self.output_video_count}.avi')
 
             out = cv2.VideoWriter(dest, cv2.VideoWriter_fourcc(*'DIVX'), 7, (width, height))
             for i in range(len(video_array)):
