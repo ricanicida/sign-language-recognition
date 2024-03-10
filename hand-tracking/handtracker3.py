@@ -6,6 +6,7 @@ from pathlib import Path
 from collections import deque
 from itertools import islice
 from time import time_ns
+import shutil
 
 
 # Hand tracker that stores all hand landmarks coordinates
@@ -25,45 +26,41 @@ class HandTracker3():
         self.results=None
 
         if max_duration and sampling_rate:
-            buffer_length = int(sampling_rate * max_duration)
+            video_length = int(sampling_rate * max_duration)
         else:
-            buffer_length = max_frames
+            video_length = max_frames
 
         if video_fps and sampling_rate:
             frame_step = int(video_fps/sampling_rate)
 
         self.frame_step = frame_step
-        self.buffer_length = buffer_length
-        self.overlap_frame = int((1-overlap)*buffer_length)
+        self.video_length = video_length
+        self.overlap_frame = int((1-overlap)*video_length)
         self.frame_count = 0
-        self.time_series_frame_flag = True
-        self.first_time_series_flag = True
+        self.frame_flag = True
         
-        self.video_frame_count = 0
+        self.output_video_flag = False
+        self.first_output_video_flag = True
+        self.output_video_count = 1
 
-        self.left_hand_coordinates = deque(buffer_length*[[]], buffer_length)
-        self.right_hand_coordinates = deque(buffer_length*[[]], buffer_length)
+        self.input_video_frame_count = 0
 
 
     def hands_finder(self,imageRGB):
-        if self.video_frame_count % self.frame_step == 0:
-            self.time_series_frame_flag = True
+        if self.input_video_frame_count % self.frame_step == 0:
+            self.frame_flag = True
             self.results = self.hands.process(imageRGB)
             self.frame_count += 1
         else:
-            self.time_series_frame_flag = False
-        self.video_frame_count += 1
+            self.frame_flag = False
+        self.input_video_frame_count += 1
         return
     
     
     def get_coordinates(self, image_shape):
-        if self.time_series_frame_flag and self.results.multi_hand_landmarks:
+        if self.frame_flag and self.results.multi_hand_landmarks:
             hands_type = []
             h,w,c = image_shape
-
-            # for hand in self.results.multi_handedness:
-            #     hand_type=hand.classification[0].label
-            #     hands_type.append(hand_type)
 
             image = np.zeros((h, w, 3), dtype = np.uint8)
             
@@ -74,41 +71,45 @@ class HandTracker3():
                     handLms, 
                     self.mp_hands.HAND_CONNECTIONS
                     )
-                
-            cv2.imwrite(f'hand-tracking/test/test{self.frame_count}.jpg', image)
-                
             
-        
+            temp_path = Path(f'./temp/video_{self.output_video_count}/')
+            if not temp_path.exists():
+                temp_path.mkdir(parents=True)
+            cv2.imwrite(f'./temp/video_{self.output_video_count}/img_{self.frame_count}.jpg', image)
 
-            # i = 0
-            # coordinates = 21*[[-1,-1]]
-            # for handLms in self.results.multi_hand_landmarks:
-
-            #     hand_label = hand_type[i]
-
-            #     for id, lm in enumerate(handLms.landmark):
-
-            #         cx , cy = int(lm.x * w), int(lm.y * h)                    
-            #         coordinates[id] = [cx, cy]
-                
-
-            #     self.add_to_buffer(coordinates, hand_label)     
-                
-            #     if len(hands_type) == 1:
-            #         if hand_label == 'Left':
-            #             self.add_to_buffer(id, [], 'R')
-            #         elif hand_label == 'Right':
-            #             self.add_to_buffer(id, [], 'L')
-                        
-            #     i += 1
         return
     
-    
-    # def add_to_buffer(self, coordinates, hand):
-    #     if hand == 'L':
-    #         self.left_hand_coordinates.appendleft(coordinates)
-    #     elif hand == 'R':
-    #         self.right_hand_coordinates.appendleft(coordinates)
+    def make_video(self, label='', video_name='', folder_path=''):
+        if self.first_output_video_flag:
+            first_video = self.input_video_frame_count + 1 == self.video_length
+            subsequent_video = False
+        else:
+            subsequent_video = self.input_video_frame_count == self.overlap_frame
+            first_video = False
+
+        if first_video or subsequent_video:
+            self.first_output_video_flag = False
+            self.input_video_frame_count = 0
+
+            imgs_path = Path(f'./temp/video_{self.output_video_count}/')
+            video_array = []
+            for file_name in imgs_path.glob('*.jpg'):
+                img = cv2.imread(str(file_name))
+                video_array.append(img)
+            height = len(img)
+            width = len(img[0])
+
+            dest = str(folder_path/label/f'video_{self.output_video_count}_{video_name}.avi')
+            print(dest)
+
+            out = cv2.VideoWriter(dest, cv2.VideoWriter_fourcc(*'DIVX'), 7, (width, height))
+            for i in range(len(video_array)):
+                out.write(video_array[i])
+            out.release()
+
+            shutil.rmtree(imgs_path)
+
+            self.output_video_count += 1
 
 
     # def return_time_series(self, label='', last_time_series_flag=False):
@@ -183,7 +184,10 @@ def main():
                 img = cv2.imread(str(file_name))
                 video_array.append(img)
 
-            out = cv2.VideoWriter('hand-tracking/test/test.mp4', cv2.VideoWriter_fourcc(*'MP4V'), 7, (len(img), len(img[0])))
+            height = len(img)
+            width = len(img[0])
+
+            out = cv2.VideoWriter('hand-tracking/test/test.avi', cv2.VideoWriter_fourcc(*'DIVX'), 7, (width, height))
             for i in range(len(video_array)):
                 out.write(video_array[i])
             out.release()
