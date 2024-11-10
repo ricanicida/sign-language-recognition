@@ -100,7 +100,7 @@ class HandTracker3():
             height = len(img)
             width = len(img[0])
 
-            dest = str(folder_path/label/f'video_{self.output_video_count}.avi')
+            dest = str(folder_path/label/f'{video_name}_video_{self.output_video_count}.avi')
 
             out = cv2.VideoWriter(dest, cv2.VideoWriter_fourcc(*'DIVX'), 7, (width, height))
             for i in range(len(video_array)):
