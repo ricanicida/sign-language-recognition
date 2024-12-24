@@ -179,9 +179,10 @@ class HandTracker():
                             k += 1   
 
                 if save:
-                    file_name = file_name + '_' + hand
+                    time_str = str(time_ns())
+                    file_name = time_str + '_' + file_name
                     folder_path_left = os.path.join(folder_path, hand, label)
-                    self.save_image(avg_image, folder_path=folder_path_left, file_name=file_name, extension=extension)
+                    self.save_image(avg_image, folder_path=folder_path_left, file_name=file_name+'_'+hand, extension=extension)
                 left_hei = avg_image
             else:
                 left_hei = []
@@ -223,9 +224,9 @@ class HandTracker():
                             k += 1   
 
                 if save:
-                    file_name = file_name + '_' + hand
+                    file_name = file_name
                     folder_path_right = os.path.join(folder_path, hand, label)
-                    self.save_image(avg_image, folder_path=folder_path_right, file_name=file_name, extension=extension)
+                    self.save_image(avg_image, folder_path=folder_path_right, file_name=file_name+'_'+hand, extension=extension)
                 right_hei = avg_image
             else:
                 right_hei = []
