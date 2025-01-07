@@ -19,8 +19,8 @@ def main():
 
     # video_folder_path = "D:/Documentos/Polito/Thesis/Datasets/A3LIS-147_italian/trimmed-life/videos/"
     # hei_folder_path = "D:/Documentos/Polito/Thesis/Datasets/A3LIS-147_italian/trimmed-life/hei-videos/"
-    video_folder_path = "D:/Documentos/Polito/Thesis/Datasets/A3LIS-147_italian/trimmed-life/augmented/usual_colors/videos/"
-    hei_folder_path = "D:/Documentos/Polito/Thesis/Datasets/A3LIS-147_italian/trimmed-life/augmented/usual_colors/hei-videos-v1/"
+    video_folder_path = "D:/Documentos/Polito/Thesis/Datasets/A3LIS-147_italian/trimmed-life/augmented/usual_colors/videos-naturalwhite/"
+    hei_folder_path = "D:/Documentos/Polito/Thesis/Datasets/A3LIS-147_italian/trimmed-life/augmented/usual_colors/hei-videos-naturalwhite-v1/"
 
     hei_file_extension = 'jpg'
     
