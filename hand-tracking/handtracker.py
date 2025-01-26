@@ -6,6 +6,7 @@ import os
 from collections import deque
 from itertools import islice
 from time import time_ns
+import logging
 
 
 class HandTracker():
@@ -21,6 +22,9 @@ class HandTracker():
         self.hands = self.mp_hands.Hands(self.mode, self.max_hands,self.model_complexity,
                                         self.detection_con, self.track_con)
         self.results=None
+
+        logging.basicConfig(level=logging.INFO) 
+        self.logger = logging.getLogger()
 
         if hei_max_duration and hei_sampling_rate:
             buffer_length = int(hei_sampling_rate * hei_max_duration)
@@ -239,7 +243,9 @@ class HandTracker():
         
     def save_image(self, image, file_name, extension='jpg', folder_path=os.getcwd()):
         if len(image)>0 and not os.path.exists(os.path.join(folder_path, file_name + '.' + extension)):
-            cv2.imwrite(os.path.join(folder_path, file_name + '.' + extension), image)
+            file_path = os.path.join(folder_path, file_name + '.' + extension)
+            self.logger.info(f"Saving {file_path}")
+            cv2.imwrite(file_path, image)
         return
     
 
