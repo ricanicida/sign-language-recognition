@@ -33,7 +33,7 @@ class NeuralNetworkModel:
         Build the CNN model with optional dropout.
         """
         print("==== Building model ====")
-        self.model = tf.keras.Sequential([
+        self.model = Sequential([
             tf.keras.layers.Rescaling(1./255),
 
             # Convolutional Layers
@@ -224,3 +224,102 @@ class CombinedModel:
             for idx, prob in zip(top_idx_avg, top_prob_avg):
                 print(f"    {self.model1_class_names[idx]}: {prob * 100:.1f}%")
             print("\n" + "-" * 50 + "\n")
+
+class TransferLearningModel:
+    def __init__(self, base_model, num_classes, dense_units=128, train_base=False, dropout_rate=0.5):
+        """
+        Initializes a transfer learning model using a pre-trained base model.
+
+        Args:
+            base_model (tf.keras.Model): Pre-trained base model (e.g., ResNet152).
+            num_classes (int): Number of output classes.
+            dense_units (int): Number of neurons in the added dense layer.
+            train_base (bool): Whether to fine-tune the base model.
+            dropout_rate (float): Dropout rate for regularization.
+        """
+        self.base_model = base_model
+        self.num_classes = num_classes
+        self.dense_units = dense_units
+        self.train_base = train_base
+        self.dropout_rate = dropout_rate
+
+        self.build_model()
+
+    def build_model(self):
+        """
+        Builds the fine-tuned model by adding custom layers.
+        """
+        # Freeze or unfreeze base model layers
+        self.base_model.trainable = self.train_base
+        
+        # Add custom layers on top of the base model
+        x = tf.keras.layers.GlobalAveragePooling2D()(self.base_model.output)  # Pooling layer
+        x = tf.keras.layers.Dense(self.dense_units, activation='relu')(x)  # Fully connected layer
+        if self.dropout_rate:
+            x = tf.keras.layers.Dropout(self.dropout_rate)(x)  # Dropout for regularization
+        output = tf.keras.layers.Dense(self.num_classes, activation='softmax')(x)  # Classification layer
+
+        # Create the final model
+        self.model = tf.keras.Model(inputs=self.base_model.input, outputs=output)
+
+    def compile_model(self, learning_rate=0.0001):
+        """
+        Compiles the model with an optimizer, loss function, and evaluation metrics.
+        """
+        self.model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
+            metrics=['accuracy']
+        )
+
+    def train(self, train_ds, val_ds=None, epochs=10, checkpoint_filepath=None):
+        """
+        Trains the model using the provided dataset.
+
+        Args:
+            train_ds: Training dataset.
+            val_ds: Validation dataset.
+            epochs (int): Number of training epochs.
+        """
+        if val_ds is not None:
+            print("==== Training and validating model ====")
+            if checkpoint_filepath is None:
+                self.checkpoint_filepath = "/temp/ckpt/checkpoint.model.keras"
+            else:
+                self.checkpoint_filepath = checkpoint_filepath
+            
+            model_checkpoint_callback = ModelCheckpoint(
+                filepath=self.checkpoint_filepath,
+                monitor='val_accuracy',
+                mode='max',
+                save_best_only=True)
+
+            epoch_tracker = BestEpochTracker()
+            history = self.model.fit(
+                train_ds, validation_data=val_ds, epochs=epochs,
+                callbacks=[model_checkpoint_callback, epoch_tracker])
+            
+            self.best_epoch = epoch_tracker.best_epoch
+        else:
+            history = self.model.fit(
+                train_ds, epochs=epochs)
+
+        return history
+
+    def evaluate(self, test_ds):
+        """
+        Evaluates the model on the test dataset.
+        """
+        return self.model.evaluate(test_ds)
+
+    def save_model(self, filepath):
+        """
+        Saves the trained model.
+        """
+        self.model.save(filepath)
+
+    def load_model(self, filepath):
+        """
+        Loads a saved model.
+        """
+        self.model = tf.keras.models.load_model(filepath)
