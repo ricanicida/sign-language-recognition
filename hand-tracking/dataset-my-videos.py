@@ -9,18 +9,15 @@ import handtracker_filter
 #           'allergia', 'ambulanza', 'amministrazione', 'ancona', 'andata']
 
 LABELS = ['abitare', 'acqua', 'affitto', 'banca', 'caldo', 'casa', 'cibo', 'data',
-          'freddo', 'interprete', 'inviare', 'lingua', 'litro', 'mangiare', 'posta', 'telefono', 'idle']
+          'freddo', 'interprete', 'inviare', 'lingua', 'litro', 'idle']
 
 def main():
 
     # creating the logger object
     logging.basicConfig(level=logging.INFO) 
 
-    # video_folder_path = "D:/Documentos/Polito/Thesis/Datasets/A3LIS-147_italian/trimmed-life/videos/"
-    # hei_folder_path = "D:/Documentos/Polito/Thesis/Datasets/A3LIS-147_italian/trimmed-life/hei-videos/"
-    video_folder_path = "D:/Documentos/Polito/Thesis/Datasets/A3LIS-147_italian/trimmed-life/videos-test-seed59/"
-    hei_folder_path = "D:/Documentos/Polito/Thesis/Datasets/A3LIS-147_italian/trimmed-life/hei-videos-test-seed59-adaptive-v1/"
-    separator = " "
+    video_folder_path = "D:/Documentos/Polito/Thesis/Datasets/A3LIS-147_italian/trimmed-life/my-videos/test/"
+    hei_folder_path = "D:/Documentos/Polito/Thesis/Datasets/A3LIS-147_italian/trimmed-life/my-videos/hei-test-v1/"
 
     hei_file_extension = 'jpg'
     
@@ -43,7 +40,7 @@ def main():
 
     for video_file_name in os.listdir(video_folder_path):
 
-        hei_file_name = video_file_name.split(separator)[0]
+        hei_file_name = video_file_name.split(".")[0]
         label = hei_file_name.split('_')[1]
 
         left_files = glob.glob(os.path.join(hei_folder_path, 'left', label, f"*_{hei_file_name}_Left.{hei_file_extension}"))
@@ -53,7 +50,7 @@ def main():
 
             tracker = handtracker_filter.HandTracker(
                 video_fps=25, hei_sampling_rate=12, hei_max_duration=4, hei_overlap=0,
-                apply_thresholding=True, grayscale_output=False, apply_gaussian_blur=False
+                apply_thresholding=False, apply_gaussian_blur=False
             )
             cap = cv2.VideoCapture(os.path.join(video_folder_path, video_file_name))
             success = True

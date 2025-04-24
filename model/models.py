@@ -1,6 +1,9 @@
 import tensorflow as tf
 import numpy as np
 from tensorflow.keras.callbacks import ModelCheckpoint, Callback
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
 
 class BestEpochTracker(Callback):
     def __init__(self):
@@ -16,7 +19,7 @@ class BestEpochTracker(Callback):
                 self.best_epoch = epoch + 1
 
 class NeuralNetworkModel:
-    def __init__(self, num_classes, dropout_rate=None):
+    def __init__(self, num_classes, dropout_rate=None, model_version=0):
         """
         Initialize the neural network model.
         
@@ -26,6 +29,7 @@ class NeuralNetworkModel:
         """
         self.num_classes = num_classes
         self.dropout_rate = dropout_rate
+        self.model_version = model_version
         self.build_model()
 
     def build_model(self):
@@ -33,20 +37,51 @@ class NeuralNetworkModel:
         Build the CNN model with optional dropout.
         """
         print("==== Building model ====")
-        self.model = Sequential([
-            tf.keras.layers.Rescaling(1./255),
+        if self.model_version == 0:
+            self.model = tf.keras.Sequential([
+                tf.keras.layers.Rescaling(1./255),
 
-            # Convolutional Layers
-            tf.keras.layers.Conv2D(32, 3, activation='relu'),
-            tf.keras.layers.MaxPooling2D(),
-            tf.keras.layers.Conv2D(32, 3, activation='relu'),
-            tf.keras.layers.MaxPooling2D(),
-            tf.keras.layers.Conv2D(32, 3, activation='relu'),
-            tf.keras.layers.MaxPooling2D(),
-            tf.keras.layers.Flatten(),
-            # Fully Connected Layer
-            tf.keras.layers.Dense(128, activation='relu'),
-        ])
+                # Convolutional Layers
+                tf.keras.layers.Conv2D(32, 3, activation='relu'),
+                tf.keras.layers.MaxPooling2D(),
+                tf.keras.layers.Conv2D(32, 3, activation='relu'),
+                tf.keras.layers.MaxPooling2D(),
+                tf.keras.layers.Conv2D(32, 3, activation='relu'),
+                tf.keras.layers.MaxPooling2D(),
+                tf.keras.layers.Flatten(),
+                # Fully Connected Layer
+                tf.keras.layers.Dense(128, activation='relu'),
+            ])
+        elif self.model_version == 1:
+            self.model = tf.keras.Sequential([
+                tf.keras.layers.Rescaling(1./255),
+
+                tf.keras.layers.Conv2D(32, (3, 3), activation='relu'),
+                tf.keras.layers.MaxPooling2D(),
+
+                tf.keras.layers.SeparableConv2D(64, (3, 3), activation='relu'),
+                tf.keras.layers.MaxPooling2D(),
+
+                tf.keras.layers.SeparableConv2D(128, (3, 3), activation='relu'),
+                tf.keras.layers.MaxPooling2D(),
+
+                tf.keras.layers.Flatten(),
+                tf.keras.layers.Dense(128, activation='relu'),
+            ])
+        elif self.model_version == 2:
+            self.model = tf.keras.Sequential([
+                tf.keras.layers.Rescaling(1./255),
+
+                tf.keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
+                tf.keras.layers.MaxPooling2D(),
+
+                # Residual Block
+                tf.keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
+                tf.keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
+
+                tf.keras.layers.Flatten(),
+                tf.keras.layers.Dense(128, activation='relu'),
+            ])
 
         # Add Dropout layer if dropout_rate is provided
         if self.dropout_rate is not None:
@@ -147,6 +182,7 @@ class CombinedModel:
         shared_indices_model2 = [self.model2_class_names.index(label) for label in shared_labels]
         
         predictions, predictions1, predictions2, true_labels = [], [], [], []
+        pred1_size = len(self.model1_class_names)
         pred2_size = len(self.model2_class_names)
         
         for inputs, labels in test_ds:
@@ -161,10 +197,26 @@ class CombinedModel:
             preds2 = outputs2.copy()
             
             for i in range(len(inputs2)):
-                if np.sum(inputs2[i]) == 0 or np.argmax(preds2[i]) == self.model2_class_names.index('idle'):
+                if np.sum(inputs2[i]) == 0:
                     preds2[i] = np.zeros(pred2_size)
-                if self.model2_class_names[np.argmax(preds2[i])] in [self.model1_class_names[j] for j in np.argpartition(preds1[i], -self.top_for_extra)[-self.top_for_extra:]]:
+                elif (
+                    np.argmax(preds2[i]) == self.model2_class_names.index('idle')
+                    and np.sum(inputs1[i]) != 0
+                ):
+                    preds2[i] = np.zeros(pred2_size)
+
+                if (
+                    self.model2_class_names[np.argmax(preds2[i])]
+                    in [
+                    self.model1_class_names[j]
+                    for j in np.argpartition(preds1[i], -self.top_for_extra)[-self.top_for_extra:]
+                    ]
+                    and np.sum(inputs1[i]) != 0
+                ):
                     preds2[i] *= self.extra_weight2
+
+                if np.sum(inputs1[i]) == 0:
+                    preds1[i] = np.zeros(pred1_size)
             
             averaged_preds = np.zeros_like(preds1)
             averaged_preds += self.weight1 * preds1
@@ -182,11 +234,53 @@ class CombinedModel:
         self.predictions1 = np.vstack(predictions1)
         self.predictions2 = np.vstack(predictions2)
 
+    def average_true_prob(self):
+        # Extract the predicted probabilities for the true class labels
+        true_probs = [self.predictions[i][label] for i, label in enumerate(self.true_labels)]
+        # Compute the average predicted probability
+        avg_prob = np.mean(true_probs)
+        return avg_prob
+
+    def top_n_accuracy(self, n):
+        correct = 0
+        for i, probs in enumerate(self.predictions):
+            top_n_preds = np.argsort(probs)[-n:]  # Get indices of top-n predictions
+            if self.true_labels[i] in top_n_preds:
+                correct += 1
+        return correct / len(self.true_labels)
+    
+    def generate_confusion_matrix(self, file_path):
+        # Compute predicted labels
+        predicted_labels = np.argmax(self.predictions, axis=1)
+
+        # Generate confusion matrix
+        cm = confusion_matrix(self.true_labels, predicted_labels)
+
+        # Plot high-resolution confusion matrix
+        plt.figure(figsize=(12, 10))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                    xticklabels=self.model1_class_names,
+                    yticklabels=self.model1_class_names)
+        plt.xlabel('Predicted Labels')
+        plt.ylabel('True Labels')
+        plt.title('Confusion Matrix')
+        plt.tight_layout()
+        
+        # Save to file
+        plt.savefig(file_path, dpi=300)
+        plt.close()
+
     def evaluate(self, test_ds):
         self.average_model_predictions(test_ds)
         predicted_classes = np.argmax(self.predictions, axis=1)
         accuracy = np.mean(predicted_classes == self.true_labels)
         print("Inference Accuracy:", accuracy)
+        top_2_acc = self.top_n_accuracy(2)
+        print("Top 2 Accuracy:", top_2_acc)
+        top_3_acc = self.top_n_accuracy(3)
+        print("Top 3 Accuracy:", top_3_acc)
+        avg_prob = self.average_true_prob()
+        print("Average probability of true label:", avg_prob)
 
     def show_predictions(self, top=3):
         """

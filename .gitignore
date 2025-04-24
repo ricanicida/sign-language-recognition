@@ -163,3 +163,5 @@ cython_debug/
 temp_videos_folder/
 temp/
 model_checkpoint
+confusion_matrix
+preprocessing/tests/
