@@ -249,7 +249,7 @@ class CombinedModel:
                 correct += 1
         return correct / len(self.true_labels)
     
-    def generate_confusion_matrix(self, file_path):
+    def generate_confusion_matrix(self, file_path): 
         # Compute predicted labels
         predicted_labels = np.argmax(self.predictions, axis=1)
 
@@ -260,10 +260,18 @@ class CombinedModel:
         plt.figure(figsize=(12, 10))
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                     xticklabels=self.model1_class_names,
-                    yticklabels=self.model1_class_names)
-        plt.xlabel('Predicted Labels')
-        plt.ylabel('True Labels')
-        plt.title('Confusion Matrix')
+                    yticklabels=self.model1_class_names,
+                    annot_kws={"size": 16})  # Increase numbers inside the cells
+
+        # Set axis labels and title with larger font
+        plt.xlabel('Predicted Labels', fontsize=18)
+        plt.ylabel('True Labels', fontsize=18)
+        plt.title('Confusion Matrix', fontsize=20)
+
+        # Increase tick labels font size
+        plt.xticks(fontsize=18, rotation=45, ha='right')
+        plt.yticks(fontsize=18, rotation=0)
+
         plt.tight_layout()
         
         # Save to file
